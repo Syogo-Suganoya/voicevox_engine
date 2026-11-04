@@ -370,14 +370,14 @@ def generate_tts_pipeline_router(
         version = core_version or LATEST_VERSION
         engine = tts_engines.get_tts_engine(version)
         sampling_rate = queries[0].outputSamplingRate
+        if any(query.outputSamplingRate != sampling_rate for query in queries):
+            msg = "サンプリングレートが異なるクエリがあります"
+            raise HTTPException(status_code=422, detail=msg)
 
-        with NamedTemporaryFile(delete=False) as f:
-            with zipfile.ZipFile(f, mode="a") as zip_file:
+        f = NamedTemporaryFile(delete=False)
+        try:
+            with f, zipfile.ZipFile(f, mode="a") as zip_file:
                 for i in range(len(queries)):
-                    if queries[i].outputSamplingRate != sampling_rate:
-                        msg = "サンプリングレートが異なるクエリがあります"
-                        raise HTTPException(status_code=422, detail=msg)
-
                     with TemporaryFile() as wav_file:
                         wave = engine.synthesize_wave(
                             queries[i],
@@ -392,6 +392,10 @@ def generate_tts_pipeline_router(
                         )
                         wav_file.seek(0)
                         zip_file.writestr(f"{str(i + 1).zfill(3)}.wav", wav_file.read())
+        except Exception:
+            # NOTE: レスポンスを返さないと後片付けのタスクが実行されないため、ここで削除する
+            try_delete_file(f.name)
+            raise
 
         background_tasks.add_task(try_delete_file, f.name)
         return FileResponse(f.name, media_type="application/zip")
