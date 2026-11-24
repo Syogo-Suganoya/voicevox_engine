@@ -11,7 +11,6 @@ else:
     from multiprocessing.connection import Connection as ConnectionType
 
 from pathlib import Path
-from tempfile import NamedTemporaryFile
 
 import soundfile
 from fastapi import Request
@@ -20,6 +19,7 @@ from .core.core_initializer import initialize_cores
 from .metas.metas import StyleId
 from .model import AudioQuery
 from .tts_pipeline.tts_engine import LatestVersion, make_tts_engines_from_cores
+from .utility.file_utility import create_temp_file
 
 
 class CancellableEngineInternalError(Exception):
@@ -226,7 +226,7 @@ def start_synthesis_subprocess(
                 style_id,
                 enable_interrogative_upspeak=enable_interrogative_upspeak,
             )
-            with NamedTemporaryFile(delete=False) as f:
+            with create_temp_file() as f:
                 soundfile.write(
                     file=f, data=wave, samplerate=query.outputSamplingRate, format="WAV"
                 )

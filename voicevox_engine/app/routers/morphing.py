@@ -1,11 +1,10 @@
 """モーフィング機能を提供する API Router"""
 
 from functools import lru_cache
-from tempfile import NamedTemporaryFile
 from typing import Annotated
 
 import soundfile
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse
 from pydantic.json_schema import SkipJsonSchema
 
@@ -23,7 +22,9 @@ from voicevox_engine.morphing.morphing import (
     synthesis_morphing_parameter as _synthesis_morphing_parameter,
 )
 from voicevox_engine.tts_pipeline.tts_engine import LATEST_VERSION, TTSEngineManager
-from voicevox_engine.utility.file_utility import try_delete_file
+from voicevox_engine.utility.file_utility import create_temp_file
+
+from ..temp_file_response import TempFileResponse
 
 # キャッシュを有効化
 # モジュール側でlru_cacheを指定するとキャッシュを制御しにくいため、HTTPサーバ側で指定する
@@ -80,7 +81,6 @@ def generate_morphing_router(
         base_style_id: Annotated[StyleId, Query(alias="base_speaker")],
         target_style_id: Annotated[StyleId, Query(alias="target_speaker")],
         morph_rate: Annotated[float, Query(ge=0.0, le=1.0)],
-        background_tasks: BackgroundTasks,
         enable_interrogative_upspeak: Annotated[
             bool,
             Query(
@@ -124,15 +124,13 @@ def generate_morphing_router(
             output_stereo=query.outputStereo,
         )
 
-        with NamedTemporaryFile(delete=False) as f:
+        with create_temp_file() as f:
             soundfile.write(
                 file=f,
                 data=morph_wave,
                 samplerate=query.outputSamplingRate,
                 format="WAV",
             )
-
-        background_tasks.add_task(try_delete_file, f.name)
-        return FileResponse(f.name, media_type="audio/wav")
+        return TempFileResponse(f.name, media_type="audio/wav")
 
     return router
